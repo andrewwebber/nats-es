@@ -1,6 +1,6 @@
-use std::marker::PhantomData;
+use std::{io::Cursor, marker::PhantomData};
 
-use async_nats::Client;
+use async_nats::{jetstream::object_store::GetErrorKind, Client};
 use async_trait::async_trait;
 use cqrs_es::{
     persist::{PersistenceError, ViewContext, ViewRepository},
@@ -8,7 +8,8 @@ use cqrs_es::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tracing::{debug, info};
+use tokio::io::AsyncReadExt;
+use tracing::debug;
 
 #[derive(Clone)]
 pub struct NatsViewRepository<V, A>
@@ -56,26 +57,28 @@ where
         let key = format!("{}.{view_id}", A::aggregate_type());
         debug!("load view '{key}'");
         let jetstream = async_nats::jetstream::new(self.client.clone());
-        let kv = jetstream
-            .get_key_value(&self.bucket_name)
+        let obj = jetstream
+            .get_object_store(&self.bucket_name)
             .await
             .map_err(|e| PersistenceError::ConnectionError(e.into()))?
             .get(key.to_owned())
-            .await
-            .map_err(|e| PersistenceError::ConnectionError(e.into()))?;
+            .await;
 
-        match kv {
-            Some(v) => {
-                if v.is_empty() {
-                    debug!("{key} is empty");
-                    return Ok(None);
-                }
+        match obj {
+            Ok(mut stream) => {
+                debug!("found object store blob {key}");
+                let mut buffer = Vec::new();
+                stream
+                    .read_to_end(&mut buffer)
+                    .await
+                    .map_err(|e| PersistenceError::DeserializationError(e.into()))?;
 
-                let view: NatsView = serde_json::from_slice(&v)?;
+                let view: NatsView = serde_json::from_slice(&buffer)?;
                 debug!("returing view {view:#?}");
                 Ok(Some(serde_json::from_value(view.payload)?))
             }
-            None => Ok(None),
+            Err(e) if e.kind() == GetErrorKind::NotFound => Ok(None),
+            Err(e) => Err(PersistenceError::DeserializationError(Box::new(e))),
         }
     }
 
@@ -89,25 +92,27 @@ where
         debug!("load_with_context - '{key}'");
 
         let jetstream = async_nats::jetstream::new(self.client.clone());
-        let kv = jetstream
-            .get_key_value(&self.bucket_name)
+        let obj = jetstream
+            .get_object_store(&self.bucket_name)
             .await
             .map_err(|e| PersistenceError::ConnectionError(e.into()))?
-            .get(key)
-            .await
-            .map_err(|e| PersistenceError::ConnectionError(e.into()))?;
+            .get(key.to_owned())
+            .await;
 
-        match kv {
-            Some(v) => {
-                if v.is_empty() {
-                    return Ok(None);
-                }
+        match obj {
+            Ok(mut stream) => {
+                debug!("found object store blob {key}");
+                let mut buffer = Vec::new();
+                stream
+                    .read_to_end(&mut buffer)
+                    .await
+                    .map_err(|e| PersistenceError::DeserializationError(e.into()))?;
 
                 let NatsView {
                     view_instance_id,
                     version,
                     payload,
-                } = serde_json::from_slice(&v)?;
+                } = serde_json::from_slice(&buffer)?;
 
                 let context = ViewContext {
                     view_instance_id,
@@ -116,7 +121,8 @@ where
 
                 Ok(Some((serde_json::from_value(payload)?, context)))
             }
-            None => Ok(None),
+            Err(e) if e.kind() == GetErrorKind::NotFound => Ok(None),
+            Err(e) => Err(PersistenceError::DeserializationError(Box::new(e))),
         }
     }
 
@@ -138,12 +144,14 @@ where
 
         let key = format!("{}.{}", A::aggregate_type(), &view.view_instance_id);
         debug!("update_view - {view:#?}");
+        let view_data = serde_json::to_vec_pretty(&view)?;
+        let mut buf = Cursor::new(view_data);
         let jetstream = async_nats::jetstream::new(self.client.clone());
         jetstream
-            .get_key_value(&self.bucket_name)
+            .get_object_store(&self.bucket_name)
             .await
             .map_err(|e| PersistenceError::ConnectionError(e.into()))?
-            .put(&key, serde_json::to_vec_pretty(&view)?.into())
+            .put(key.as_str(), &mut buf)
             .await
             .map_err(|e| PersistenceError::ConnectionError(e.into()))?;
         Ok(())
