@@ -21,3 +21,8 @@ dotenvy = "0"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 envy = "0"
 uuid = { version = "1", features= ["v4"] }
+criterion = { version = "0.5", features = ["async_tokio"] }
+
+[[bench]]
+name = "my_benchmark"
+harness = false
