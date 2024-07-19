@@ -298,6 +298,10 @@ impl PersistedEventRepository for NatsEventStore {
         _snapshot_update: Option<(String, Value, usize)>,
     ) -> Result<(), PersistenceError> {
         info!("persist events - {events:#?}");
+        if events.is_empty() {
+            return Ok(());
+        }
+
         let jetstream =
             async_nats::jetstream::with_domain(self.client.clone(), &self.options.domain);
 
