@@ -4,10 +4,11 @@ use async_nats::{
     jetstream::{
         consumer::pull,
         context::{CreateStreamError, Publish},
+        message::StreamMessage,
         response::Response,
         stream::{Config, DirectGetErrorKind},
     },
-    Client, Message,
+    Client,
 };
 use async_trait::async_trait;
 use cqrs_es::{
@@ -335,10 +336,9 @@ impl PersistedEventRepository for NatsEventStore {
                 .map_err(|e| PersistenceError::ConnectionError(Box::new(e)))?;
             expected_last_subject_sequence = Some(raw_message.sequence);
 
-            let Message { headers, .. } = Message::try_from(raw_message)
-                .map_err(|_| PersistenceError::OptimisticLockError)?;
+            let StreamMessage { headers, .. } = raw_message;
 
-            match headers.unwrap_or_default().get("event_sequence") {
+            match headers.get("event_sequence") {
                 Some(event_sequence) => {
                     let sequence = events[0].sequence;
                     let event_sequence: usize = event_sequence

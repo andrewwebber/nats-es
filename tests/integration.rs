@@ -82,11 +82,11 @@ impl From<&str> for BankAccountError {
 pub struct BankAccountServices;
 
 impl BankAccountServices {
-    async fn atm_withdrawal(&self, _atm_id: &str, _amount: f64) -> Result<(), AtmError> {
+    pub async fn atm_withdrawal(&self, _atm_id: &str, _amount: f64) -> Result<(), AtmError> {
         Ok(())
     }
 
-    async fn validate_check(&self, _account: &str, _check: &str) -> Result<(), CheckingError> {
+    pub async fn validate_check(&self, _account: &str, _check: &str) -> Result<(), CheckingError> {
         Ok(())
     }
 }
