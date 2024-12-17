@@ -524,7 +524,7 @@ impl PersistedEventRepository for NatsEventStore {
                                 message.ack().await.unwrap();
                             }
                         }
-                        Err(e) => panic!("{e}"),
+                        Err(e) => warn!("{e}"),
                     }
 
                     pending -= 1;
