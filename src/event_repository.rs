@@ -524,7 +524,10 @@ impl PersistedEventRepository for NatsEventStore {
                                 message.ack().await.unwrap();
                             }
                         }
-                        Err(e) => warn!("{e}"),
+                        Err(e) => feed
+                            .push(Err(PersistenceError::UnknownError(Box::new(e))))
+                            .await
+                            .unwrap(),
                     }
 
                     pending -= 1;
