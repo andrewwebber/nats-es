@@ -84,6 +84,7 @@ impl From<SerializedEvent> for NatsSerializedEvent {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct NatsEventStoreOptions {
     pub stream_name: String,
     pub aggregate_types: Vec<String>,
@@ -91,6 +92,7 @@ pub struct NatsEventStoreOptions {
     pub domain: String,
 }
 
+#[derive(Debug, Clone)]
 pub struct NatsEventStore {
     client: Client,
     options: NatsEventStoreOptions,
